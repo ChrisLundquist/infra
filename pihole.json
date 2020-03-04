@@ -1,0 +1,38 @@
+{
+  "builders": [
+    {
+      "type": "lxd",
+      "name": "pihole",
+      "init_sleep": "5",
+      "image": "bionic-base",
+      "output_image": "pihole",
+      "publish_properties": {
+        "description": "pihole dns blocking"
+      }
+    }
+  ],
+  "provisioners":[
+      {
+          "type": "file",
+          "source": "files/etc/default/cloudflared",
+          "destination": "/etc/default/cloudflared"
+      },
+      {
+          "type": "shell",
+          "script": "scripts/cloudflared.sh"
+      },
+      {
+          "type": "shell",
+          "inline": ["mkdir /etc/pihole/"]
+      },
+      {
+          "type": "file",
+          "source": "files/etc/pihole/setupVars.conf",
+          "destination": "/etc/pihole/setupVars.conf"
+      },
+      {
+          "type": "shell",
+          "inline": ["wget -O basic-install.sh https://install.pi-hole.net; sudo bash basic-install.sh --unattended || true"]
+      }
+  ]
+}

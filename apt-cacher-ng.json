@@ -1,0 +1,29 @@
+{
+  "builders": [
+    {
+      "type": "lxd",
+      "name": "apt-cacher-ng",
+      "init_sleep": "5",
+      "image": "bionic-base",
+      "output_image": "apt-cacher-ng",
+      "publish_properties": {
+        "description": "apt proxy"
+      }
+    }
+  ],
+  "provisioners":[
+      {
+          "type": "shell",
+          "inline": ["apt update && apt install -y apt-cacher-ng"]
+      },
+      {
+          "type": "file",
+          "source": "files/etc/apt-cacher-ng/acng.conf",
+          "destination": "/etc/apt-cacher-ng/acng.conf"
+      },
+      {
+          "type": "shell",
+          "inline": ["chown root: /etc/apt-cacher-ng/acng.conf && chmod 0644 /etc/apt-cacher-ng/acng.conf"]
+      }
+  ]
+}

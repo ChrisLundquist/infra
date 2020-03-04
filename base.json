@@ -1,0 +1,29 @@
+{
+  "builders": [
+    {
+      "type": "lxd",
+      "name": "bionic-base",
+      "init_sleep": "5",
+      "image": "ubuntu-daily:bionic",
+      "output_image": "bionic-base",
+      "publish_properties": {
+        "description": "rsyslog, unattended-upgrades, apt mirror, etc"
+      }
+    }
+  ],
+  "provisioners":[
+      {
+          "type": "shell",
+          "inline": ["apt update && apt install -y avahi-daemon squid-deb-proxy-client"]
+      },
+      {
+          "type": "file",
+          "source": "files/etc/rsyslog.d/90-remote.conf",
+          "destination": "/etc/rsyslog.d/90-remote.conf"
+      },
+      {
+          "type": "shell",
+          "inline": ["apt update && apt install -y unattended-upgrades ntp"]
+      }
+  ]
+}
