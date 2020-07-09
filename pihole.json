@@ -4,7 +4,7 @@
       "type": "lxd",
       "name": "pihole",
       "init_sleep": "5",
-      "image": "bionic-base",
+      "image": "focal-base",
       "output_image": "pihole",
       "publish_properties": {
         "description": "pihole dns blocking"
@@ -33,6 +33,11 @@
       {
           "type": "shell",
           "inline": ["wget -O basic-install.sh https://install.pi-hole.net; sudo bash basic-install.sh --unattended || true"]
+      },
+      {
+          "type": "file",
+          "source": "files/etc/pihole/adlists.list",
+          "destination": "/etc/pihole/adlists.list"
       }
   ]
 }

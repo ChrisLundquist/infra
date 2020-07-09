@@ -2,10 +2,10 @@
   "builders": [
     {
       "type": "lxd",
-      "name": "bionic-base",
+      "name": "focal-base",
       "init_sleep": "5",
-      "image": "ubuntu-daily:bionic",
-      "output_image": "bionic-base",
+      "image": "ubuntu-daily:focal",
+      "output_image": "focal-base",
       "publish_properties": {
         "description": "rsyslog, unattended-upgrades, apt mirror, etc"
       }
