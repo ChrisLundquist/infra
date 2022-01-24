@@ -4,7 +4,7 @@
       "type": "lxd",
       "name": "apt-cacher-ng",
       "init_sleep": "5",
-      "image": "bionic-base",
+      "image": "focal-base",
       "output_image": "apt-cacher-ng",
       "publish_properties": {
         "description": "apt proxy"
@@ -14,7 +14,7 @@
   "provisioners":[
       {
           "type": "shell",
-          "inline": ["apt update && apt install -y apt-cacher-ng"]
+          "inline": [" apt update && DEBIAN_FRONTEND=noninteractive apt install -y apt-cacher-ng"]
       },
       {
           "type": "file",
