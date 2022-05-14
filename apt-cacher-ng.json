@@ -4,7 +4,7 @@
       "type": "lxd",
       "name": "apt-cacher-ng",
       "init_sleep": "5",
-      "image": "focal-base",
+      "image": "jammy-base",
       "output_image": "apt-cacher-ng",
       "publish_properties": {
         "description": "apt proxy"

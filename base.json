@@ -2,10 +2,10 @@
   "builders": [
     {
       "type": "lxd",
-      "name": "focal-base",
+      "name": "jammy-base",
       "init_sleep": "5",
-      "image": "ubuntu-daily:focal",
-      "output_image": "focal-base",
+      "image": "ubuntu-daily:jammy",
+      "output_image": "jammy-base",
       "publish_properties": {
         "description": "rsyslog, unattended-upgrades, apt mirror, etc"
       }
@@ -24,6 +24,10 @@
       {
           "type": "shell",
           "inline": ["apt update && apt install -y unattended-upgrades ntp"]
+      },
+      {
+          "type": "shell",
+          "inline": ["apt remove snapd -y"]
       }
   ]
 }
