@@ -4,7 +4,7 @@
       "type": "lxd",
       "name": "pihole",
       "init_sleep": "5",
-      "image": "focal-base",
+      "image": "jammy-base",
       "output_image": "pihole",
       "publish_properties": {
         "description": "pihole dns blocking"
@@ -32,7 +32,7 @@
       },
       {
           "type": "shell",
-          "inline": ["wget -O basic-install.sh https://install.pi-hole.net; sudo bash basic-install.sh --unattended || true"]
+          "inline": ["wget -O basic-install.sh https://install.pi-hole.net; sudo PIHOLE_SKIP_OS_CHECK=true bash ./basic-install.sh --unattended || true"]
       },
       {
           "type": "file",
