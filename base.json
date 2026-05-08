@@ -2,10 +2,10 @@
   "builders": [
     {
       "type": "lxd",
-      "name": "jammy-base",
+      "name": "resolute-base",
       "init_sleep": "5",
-      "image": "ubuntu-daily:jammy",
-      "output_image": "jammy-base",
+      "image": "ubuntu-daily:resolute",
+      "output_image": "resolute-base",
       "publish_properties": {
         "description": "rsyslog, unattended-upgrades, apt mirror, etc"
       }
@@ -23,7 +23,7 @@
       },
       {
           "type": "shell",
-          "inline": ["apt update && apt install -y unattended-upgrades ntp"]
+          "inline": ["apt update && apt install -y unattended-upgrades chrony"]
       },
       {
           "type": "shell",

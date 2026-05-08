@@ -4,7 +4,7 @@
       "type": "lxd",
       "name": "pihole",
       "init_sleep": "5",
-      "image": "jammy-base",
+      "image": "resolute-base",
       "output_image": "pihole",
       "publish_properties": {
         "description": "pihole dns blocking"

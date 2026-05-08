@@ -2,7 +2,7 @@
 
 set -xe
 # wget -O cloudflared.deb https://bin.equinox.io/c/VdrWdbjqyF/cloudflared-stable-linux-amd64.deb
-wget -O cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2022.1.2/cloudflared-linux-amd64.deb
+wget -O cloudflared.deb https://github.com/cloudflare/cloudflared/releases/download/2026.3.0/cloudflared-linux-amd64.deb
 apt install -y ./cloudflared.deb
 
 mkdir /etc/cloudflared/
