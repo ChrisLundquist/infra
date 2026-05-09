@@ -35,13 +35,13 @@
           "destination": "/etc/pihole/setupVars.conf"
       },
       {
-          "type": "shell",
-          "inline": ["wget -O basic-install.sh https://install.pi-hole.net; sudo PIHOLE_SKIP_OS_CHECK=true bash ./basic-install.sh --unattended || true"]
-      },
-      {
           "type": "file",
           "source": "files/etc/pihole/adlists.list",
           "destination": "/etc/pihole/adlists.list"
+      },
+      {
+          "type": "shell",
+          "inline": ["wget -O basic-install.sh https://install.pi-hole.net; sudo PIHOLE_SKIP_OS_CHECK=true bash ./basic-install.sh --unattended || true"]
       }
   ]
 }
