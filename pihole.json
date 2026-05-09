@@ -13,13 +13,17 @@
   ],
   "provisioners":[
       {
+          "type": "shell",
+          "script": "scripts/unbound.sh"
+      },
+      {
           "type": "file",
-          "source": "files/etc/default/cloudflared",
-          "destination": "/etc/default/cloudflared"
+          "source": "files/etc/unbound/unbound.conf.d/pi-hole.conf",
+          "destination": "/etc/unbound/unbound.conf.d/pi-hole.conf"
       },
       {
           "type": "shell",
-          "script": "scripts/cloudflared.sh"
+          "inline": ["chown root:root /etc/unbound/unbound.conf.d/pi-hole.conf && chmod 0644 /etc/unbound/unbound.conf.d/pi-hole.conf"]
       },
       {
           "type": "shell",
