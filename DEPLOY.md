@@ -16,15 +16,19 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
   - `.253` is `pihole-basic` on deon (`deon.local`, 192.168.0.71, bare
     metal): Ubuntu 22.04, Pi-hole core 6.1.4 / FTL 6.2.3, created 2022-12.
     It's the only working resolver on the LAN. Its upstream is cloudflared
-    on 127.0.0.1#5300, whose `proxy-dns` was removed in cloudflared 2026.2.0,
-    so an update to that package would take the LAN's DNS down. Its netplan
-    has `dhcp4: true` plus the static .253, so it also holds .145.
+    2022.1.2 on 127.0.0.1#5300, installed from a standalone .deb with
+    `--no-autoupdate` and no apt source, so it won't update by itself. Don't
+    upgrade it by hand: `proxy-dns` was removed in cloudflared 2026.2.0, and
+    the LAN's DNS would go with it. Its netplan has `dhcp4: true` plus the
+    static .253, so it also holds .145.
   - `.26` isn't any instance on deon or nuc2 and doesn't answer ping or ARP.
     It's a stale DHCP entry; take it out of the router's DNS list now so
     clients stop timing out on it.
-- deon also runs `logs` (.146, the `logs.local` syslog target, Ubuntu
-  18.04), `ts-exit-1` (Tailscale exit node), and stopped 18.04 containers
-  `distcc-5`, `ums` and `vpn`. None of these have templates here yet.
+- deon (LXD 6.7, `dir` storage pool, 44 of 469 GiB used) holds the critical
+  containers: `pihole-basic`, `ts-exit-1` (Tailscale exit node) and `logs`
+  (.146, the `logs.local` syslog target, Ubuntu 18.04). It also has stopped
+  18.04 containers `distcc-5`, `ums` and `vpn`. None of these besides the
+  Pi-hole have templates here yet.
 - The `pihole` container on this host (`.254`, plus `.3` from DHCP) runs
   Ubuntu 20.04. Its `dns.upstreams` is empty, so it answers `REFUSED` to
   everything. It also runs a 2022 cloudflared and a stray ntpd. No client
@@ -42,7 +46,9 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
 ## 0. Let nuc2 reach deon
 
 The Pi-hole state to migrate lives on `deon:pihole-basic`, and step 2 needs
-the image on deon. nuc2's lxc client isn't trusted there yet. On deon:
+the image on deon. nuc2's lxc client isn't trusted there yet, and deon
+doesn't know nuc2 as a remote. Either run the deon steps from deon itself
+(after building or copying the images there), or trust nuc2. On deon:
 
 ```bash
 lxc config trust add --name nuc2
