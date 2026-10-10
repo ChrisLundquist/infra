@@ -42,8 +42,8 @@ Variables (pass with `-var name=value` or `PKR_VAR_name`):
 - `ubuntu_release`: codename for the base image (default `resolute`).
 - `dns_upstream_mode`: `recursive` (default) has unbound resolve from the root
   servers itself, so no single provider sees every query. `dot` forwards
-  everything to Quad9 over DNS-over-TLS instead, which hides queries from the
-  ISP but trusts Quad9 with all of them.
+  everything to Cloudflare (1.1.1.1/1.0.0.1) over DNS-over-TLS instead, which
+  hides queries from the ISP but trusts Cloudflare with all of them.
 
 ## Pi-hole blocklists
 
