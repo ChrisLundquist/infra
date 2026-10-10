@@ -1,0 +1,8 @@
+[Unit]
+Description=Update Pi-hole gravity (blocklists)
+Wants=network-online.target
+After=network-online.target pihole-FTL.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pihole -g

@@ -1,0 +1,27 @@
+# Seed config for Pi-hole v6 (pihole-FTL). Only settings that differ from
+# Pi-hole's defaults live here; FTL fills in the rest and rewrites this file
+# on first start. Blocklists and allow/deny entries live in gravity.db.
+[dns]
+  upstreams = ["127.0.0.1#5335"] # unbound, see files/etc/unbound/
+  domainNeeded = true
+  bogusPriv = true
+  dnssec = false # unbound validates and answers SERVFAIL for bogus replies
+  listeningMode = "LOCAL"
+  [dns.domain]
+    name = "lan"
+
+# The container can't set its own clock and the LAN gets time elsewhere.
+[ntp]
+  [ntp.ipv4]
+    active = false
+  [ntp.ipv6]
+    active = false
+  [ntp.sync]
+    active = false
+
+[webserver.interface]
+  boxed = true
+
+# No web/API password on purpose: home network, admin UI only answers the LAN.
+[webserver.api]
+  pwhash = ""

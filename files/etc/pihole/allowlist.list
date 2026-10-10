@@ -1,0 +1,5 @@
+# Exact domains to allow on top of whatever is migrated from the old Pi-hole.
+# Applied at image build and again by scripts/migrate-pihole-state.sh.
+
+# Samsung TV account sign-in; HaGeZi Pro and OISD block it.
+osb.samsungqbe.com

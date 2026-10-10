@@ -1,0 +1,12 @@
+# Pi-hole's own cron only rebuilds gravity weekly. The threat-intel feeds in
+# adlists.list expire within hours, so rebuild daily.
+[Unit]
+Description=Daily Pi-hole gravity update
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

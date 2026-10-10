@@ -1,0 +1,8 @@
+# Sourced by /etc/init.d/distcc; see the packaged file for every option.
+STARTDISTCC="true"
+# 127.0.0.1 is only for the image build's smoke test.
+ALLOWEDNETS="127.0.0.1 192.168.0.0/24 192.168.4.0/24"
+LISTENER="0.0.0.0"
+NICE="10"
+JOBS=""
+ZEROCONF="false"
