@@ -43,6 +43,9 @@ build {
       # We use `lxc exec`, not `lxc console`, and LXD's /dev/console often isn't
       # ready when agetty starts, which leaves every container "degraded".
       "systemctl mask console-getty.service",
+      # Nor ssh: the image has no keys or passwords, so sshd is only attack
+      # surface. Unmask ssh.socket in a container that needs it.
+      "systemctl mask ssh.socket ssh.service",
     ], local.image_cleanup)
   }
 }

@@ -43,6 +43,8 @@ build {
       "curl -sf -o /dev/null -x http://127.0.0.1:3142 https://archive.ubuntu.com/",
       # -p forces a CONNECT tunnel to port 80, which would succeed if allowed.
       "if curl -sf -p -o /dev/null --max-time 10 -x http://127.0.0.1:3142 http://archive.ubuntu.com/ubuntu/; then echo 'proxy tunnels non-443 ports' >&2; exit 1; fi",
+      # The pattern must not be fooled by a suffix that acng strips before connecting.
+      "python3 -c 'import socket; s = socket.create_connection((\"127.0.0.1\", 3142)); s.sendall(b\"CONNECT 127.0.0.1:22?:443 HTTP/1.1\\r\\nHost: x\\r\\n\\r\\n\"); r = s.recv(64); assert b\" 403 \" in r, r'",
     ], local.image_cleanup)
   }
 }

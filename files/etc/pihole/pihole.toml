@@ -25,3 +25,8 @@
 # No web/API password on purpose: home network, admin UI only answers the LAN.
 [webserver.api]
   pwhash = ""
+
+# Pass unbound's "authenticated data" flag on to clients. Safe because the
+# only upstream is unbound on loopback, which does the validating.
+[misc]
+  dnsmasq_lines = ["proxy-dnssec"]

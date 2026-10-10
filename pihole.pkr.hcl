@@ -106,6 +106,7 @@ build {
       # Repo allowlist entries resolve even though the lists block them.
       "dig +short +timeout=5 @127.0.0.1 osb.samsungqbe.com | grep -vq '^0.0.0.0$'",
       "dig +timeout=5 @127.0.0.1 dnssec-failed.org | grep -q 'status: SERVFAIL'",
+      "dig +dnssec +timeout=5 @127.0.0.1 isc.org | grep -q 'flags:.* ad'",
       # No password: the API must accept us without logging in.
       "curl -sf http://127.0.0.1/api/auth | grep -q '\"valid\":true'",
     ]
