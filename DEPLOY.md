@@ -10,35 +10,33 @@ names with a remote (e.g. `deon:`) for other hosts. `lxc rename` only works on
 a stopped instance, which is why swaps stop the new container briefly. A
 renamed container picks up its new name as hostname (and mDNS name) on start.
 
-## State as of 2026-10-09 (worth re-checking first)
+## State as of 2026-10-10 (worth re-checking first)
 
 - LAN clients get DNS servers `192.168.0.253` and `192.168.0.26` from DHCP.
+  Both work now.
+  - `.26` is `pihole2` on nuc2 (26.04, this repo's `pihole` image), deployed
+    2026-10-10 on an address nothing else held.
+  - `.254` is `pihole` on nuc2 (same image), replacing a broken 20.04
+    container that answered `REFUSED` to everything (kept stopped as
+    `pihole-focal`). It isn't in the router's DHCP DNS list yet. Both nuc2
+    Pi-holes got their allow/deny entries from that old container, plus
+    `files/etc/pihole/allowlist.list`.
   - `.253` is `pihole-basic` on deon (`deon.local`, 192.168.0.71, bare
     metal): Ubuntu 22.04, Pi-hole core 6.1.4 / FTL 6.2.3, created 2022-12.
-    It's the only working resolver on the LAN. Its upstream is cloudflared
-    2022.1.2 on 127.0.0.1#5300, installed from a standalone .deb with
-    `--no-autoupdate` and no apt source, so it won't update by itself. Don't
-    upgrade it by hand: `proxy-dns` was removed in cloudflared 2026.2.0, and
-    the LAN's DNS would go with it. Its netplan has `dhcp4: true` plus the
-    static .253, so it also holds .145.
-  - `.26` isn't any instance on deon or nuc2 and doesn't answer ping or ARP.
-    It's a stale DHCP entry; take it out of the router's DNS list now so
-    clients stop timing out on it.
-- deon (LXD 6.7, `dir` storage pool, 44 of 469 GiB used) holds the critical
-  containers: `pihole-basic`, `ts-exit-1` (Tailscale exit node) and `logs`
-  (.146, the `logs.local` syslog target, Ubuntu 18.04). It also has stopped
-  18.04 containers `distcc-5`, `ums` and `vpn`. None of these besides the
-  Pi-hole have templates here yet.
-- The `pihole` container on this host (`.254`, plus `.3` from DHCP) runs
-  Ubuntu 20.04. Its `dns.upstreams` is empty, so it answers `REFUSED` to
-  everything. It also runs a 2022 cloudflared and a stray ntpd. No client
-  depends on it, which makes it the safe one to replace first.
-- `apt-cacher-ng` on this host is also Ubuntu 20.04, with a 29G cache.
-  `apt-cacher-ng-next` (26.04) is already running next to it from an earlier
-  build of the image; both answer over mDNS.
-- `distcc-2` on this host is Ubuntu 18.04 with gcc 7/8. distcc needs workers
-  to run the same compiler as the client, so it can't help 26.04 clients
-  (gcc 15), and its log shows no recent jobs.
+    Leave it alone until there's a go-ahead (section 2). Its upstream is
+    cloudflared 2022.1.2 on 127.0.0.1#5300, installed from a standalone .deb
+    with `--no-autoupdate` and no apt source, so it won't update by itself.
+    Don't upgrade it by hand: `proxy-dns` was removed in cloudflared 2026.2.0.
+    Its netplan has `dhcp4: true` plus the static .253, so it also holds
+    .145.
+- deon (LXD 6.7, `dir` storage pool, 44 of 469 GiB used) holds `pihole-basic`,
+  `ts-exit-1` (Tailscale exit node) and `logs` (.146, the `logs.local` syslog
+  target, Ubuntu 18.04), plus stopped 18.04 containers `distcc-5`, `ums` and
+  `vpn`. None of these besides the Pi-hole have templates here yet.
+- nuc2's `apt-cacher-ng` and `distcc-2` run this repo's 26.04 images since
+  2026-10-10; the old ones are stopped as `apt-cacher-ng-focal` (with its 29G
+  cache) and `distcc-bionic`. distcc workers must run the same compiler as
+  their clients, so the new one serves 26.04 clients (gcc 15).
 - The `default` storage pool is a 91 GiB loop file with about 23 GiB free.
   Every `make` rebuild keeps the previous image (unaliased) for rollback, so
   prune old ones now and then (`lxc image list`, then `lxc image delete`).
@@ -60,7 +58,10 @@ Then on nuc2, with the token it prints:
 lxc remote add deon 192.168.0.71 --token <token>
 ```
 
-## 1. Pi-hole: replace the broken `.254` first
+## 1. Pi-hole on nuc2 (`.254`, and the same for `.26`)
+
+Done on 2026-10-10 for both addresses; this is the procedure for the next
+upgrade.
 
 1. Launch the new image, which gets a temporary DHCP address, and refresh its
    blocklists. The threat-intel feeds baked in at build time go stale within
@@ -104,7 +105,7 @@ lxc remote add deon 192.168.0.71 --token <token>
    lxc exec pihole-next -- sh -c 'printf "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: false\n      addresses: [192.168.0.254/24]\n      routes: [{to: default, via: 192.168.0.1}]\n      nameservers: {addresses: [127.0.0.1]}\n" > /etc/netplan/60-static.yaml && chmod 600 /etc/netplan/60-static.yaml'
    ```
 
-5. Swap. Nothing uses `.254` today, so this doesn't affect clients:
+5. Swap. While a Pi-hole restarts, clients use the other resolver:
 
    ```bash
    lxc stop pihole && lxc rename pihole pihole-focal
@@ -116,14 +117,13 @@ lxc remote add deon 192.168.0.71 --token <token>
 
    Then repeat the `dig` checks against `192.168.0.254`.
 
-6. On the router, change the DHCP DNS servers to `.254, .253` (dropping the
-   dead `.26`). Clients pick this up as their leases renew. Both servers work,
-   so nobody loses DNS in the meantime.
+6. Optionally add `.254` to the router's DHCP DNS servers alongside `.26`
+   and `.253`.
 
 ## 2. Pi-hole: roll `.253` onto the new image
 
-Wait until clients have renewed their leases (or a lease length has passed)
-so everyone has `.254`. Then do the same on deon, keeping the name
+Only with a go-ahead for deon. Clients already have `.26` as a second
+working resolver. Then do the same on deon, keeping the name
 `pihole-basic` so the two Pi-holes keep distinct mDNS names. Copy the image
 over first:
 
@@ -156,16 +156,11 @@ follow the same pattern, one Pi-hole at a time.
 
 ## 3. apt-cacher-ng
 
+Done on 2026-10-10; this is the procedure for the next upgrade.
+
 Clients find the proxy over mDNS (`_apt_proxy._tcp`), and
 squid-deb-proxy-client falls back to going direct when it finds none. That
 means two proxies can run side by side.
-
-`apt-cacher-ng-next` is currently running from an older build of the image, so
-replace it first:
-
-```bash
-lxc delete -f apt-cacher-ng-next
-```
 
 ```bash
 lxc launch apt-cacher-ng apt-cacher-ng-next
@@ -189,6 +184,8 @@ lxc stop apt-cacher-ng-next && lxc rename apt-cacher-ng-next apt-cacher-ng && lx
 For the few seconds in between, clients find no proxy and fetch directly.
 
 ## 4. distcc
+
+Done on 2026-10-10; this is the procedure for the next upgrade.
 
 distcc clients fall back to compiling locally when a worker is unreachable,
 so a short gap is harmless.
