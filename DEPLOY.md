@@ -13,12 +13,18 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
 ## State as of 2026-10-09 (worth re-checking first)
 
 - LAN clients get DNS servers `192.168.0.253` and `192.168.0.26` from DHCP.
-  - `.253` is a working Pi-hole v6 that advertises itself as
-    `pihole-basic.local`. It's an LXD container (MAC `00:16:3e:42:d1:0e`) on
-    a host other than this one; which host is still unconfirmed.
-  - `.26` doesn't answer at all. It should be a Pi-hole container on
-    `deon.local` (192.168.0.71), or on deon's own host, since deon's MAC is
-    LXD-assigned too. This machine's lxc client isn't trusted on deon yet.
+  - `.253` is `pihole-basic` on deon (`deon.local`, 192.168.0.71, bare
+    metal): Ubuntu 22.04, Pi-hole core 6.1.4 / FTL 6.2.3, created 2022-12.
+    It's the only working resolver on the LAN. Its upstream is cloudflared
+    on 127.0.0.1#5300, whose `proxy-dns` was removed in cloudflared 2026.2.0,
+    so an update to that package would take the LAN's DNS down. Its netplan
+    has `dhcp4: true` plus the static .253, so it also holds .145.
+  - `.26` isn't any instance on deon or nuc2 and doesn't answer ping or ARP.
+    It's a stale DHCP entry; take it out of the router's DNS list now so
+    clients stop timing out on it.
+- deon also runs `logs` (.146, the `logs.local` syslog target, Ubuntu
+  18.04), `ts-exit-1` (Tailscale exit node), and stopped 18.04 containers
+  `distcc-5`, `ums` and `vpn`. None of these have templates here yet.
 - The `pihole` container on this host (`.254`, plus `.3` from DHCP) runs
   Ubuntu 20.04. Its `dns.upstreams` is empty, so it answers `REFUSED` to
   everything. It also runs a 2022 cloudflared and a stray ntpd. No client
@@ -32,6 +38,21 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
 - The `default` storage pool is a 91 GiB loop file with about 23 GiB free.
   Every `make` rebuild keeps the previous image (unaliased) for rollback, so
   prune old ones now and then (`lxc image list`, then `lxc image delete`).
+
+## 0. Let nuc2 reach deon
+
+The Pi-hole state to migrate lives on `deon:pihole-basic`, and step 2 needs
+the image on deon. nuc2's lxc client isn't trusted there yet. On deon:
+
+```bash
+lxc config trust add --name nuc2
+```
+
+Then on nuc2, with the token it prints:
+
+```bash
+lxc remote add deon 192.168.0.71 --token <token>
+```
 
 ## 1. Pi-hole: replace the broken `.254` first
 
@@ -47,15 +68,15 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
    lxc exec pihole-next -- pihole -g
    ```
 
-2. Copy the hand-curated state from the working Pi-hole (`.253`, most likely
-   instance `pihole-basic` on whichever host runs it): allow/deny entries,
+2. Copy the hand-curated state from the working Pi-hole (`deon:pihole-basic`
+   at `.253`): allow/deny entries,
    groups, clients, local DNS records and CNAMEs. Blocklists come from the
    image (`files/etc/pihole/adlists.list`), the repo's
    `files/etc/pihole/allowlist.list` is re-applied on top, and there's
    deliberately no admin password. Nothing is written to the source.
 
    ```bash
-   scripts/migrate-pihole-state.sh <remote>:pihole-basic pihole-next
+   scripts/migrate-pihole-state.sh deon:pihole-basic pihole-next
    ```
 
    Don't use teleporter for this. Importing a backup from an older FTL fails
@@ -89,34 +110,38 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
 
    Then repeat the `dig` checks against `192.168.0.254`.
 
-6. On the router, change the DHCP DNS servers from `.253, .26` to `.254, .253`.
-   Clients pick this up as their leases renew. Both servers work, so nobody
-   loses DNS in the meantime.
+6. On the router, change the DHCP DNS servers to `.254, .253` (dropping the
+   dead `.26`). Clients pick this up as their leases renew. Both servers work,
+   so nobody loses DNS in the meantime.
 
 ## 2. Pi-hole: roll `.253` onto the new image
 
 Wait until clients have renewed their leases (or a lease length has passed)
-so everyone has `.254`. Then, on `.253`'s host (prefix every instance name
-with its remote, shown here as `<r>:`), keep the name `pihole-basic` so the
-two Pi-holes keep distinct mDNS names:
+so everyone has `.254`. Then do the same on deon, keeping the name
+`pihole-basic` so the two Pi-holes keep distinct mDNS names. Copy the image
+over first:
 
 ```bash
-lxc launch pihole <r>:pihole-basic-next && lxc exec <r>:pihole-basic-next -- pihole -g
+lxc image copy pihole deon: --alias pihole
 ```
 
 ```bash
-scripts/migrate-pihole-state.sh <r>:pihole-basic <r>:pihole-basic-next
+lxc launch deon:pihole deon:pihole-basic-next && lxc exec deon:pihole-basic-next -- pihole -g
+```
+
+```bash
+scripts/migrate-pihole-state.sh deon:pihole-basic deon:pihole-basic-next
 ```
 
 Check it as in step 1.3, then write the static address with
-`192.168.0.253/24` as in step 1.4 (into `<r>:pihole-basic-next`), and swap:
+`192.168.0.253/24` as in step 1.4 (into `deon:pihole-basic-next`), and swap:
 
 ```bash
-lxc stop <r>:pihole-basic && lxc rename <r>:pihole-basic <r>:pihole-basic-old
+lxc stop deon:pihole-basic && lxc rename deon:pihole-basic deon:pihole-basic-old
 ```
 
 ```bash
-lxc stop <r>:pihole-basic-next && lxc rename <r>:pihole-basic-next <r>:pihole-basic && lxc start <r>:pihole-basic
+lxc stop deon:pihole-basic-next && lxc rename deon:pihole-basic-next deon:pihole-basic && lxc start deon:pihole-basic
 ```
 
 While `.253` restarts, `.254` answers; clients that try `.253` first may wait
