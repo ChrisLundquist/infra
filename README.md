@@ -24,6 +24,22 @@ their source mode.
 cd ~/code/packer-plugin-lxd && git checkout main && git pull clundquist main && go build -o packer-plugin-lxd . && packer plugins install --path ./packer-plugin-lxd github.com/hashicorp/lxd
 ```
 
+Builds run on the `build` LXD profile (override with `-var build_profile=...`),
+which puts build containers on a NAT network instead of the LAN. Throwaway
+containers on the LAN bridge each take a DHCP lease from the router (12h), get
+announced over mDNS and log to `logs.local`; a day of builds and tests used up
+the router's DHCP pool once. Create the profile once per build host:
+
+```bash
+lxc network create buildbr0 ipv4.address=10.231.0.1/24 ipv4.nat=true ipv6.address=none
+```
+
+```bash
+lxc profile create build && lxc profile device add build root disk path=/ pool=default && lxc profile device add build eth0 nic network=buildbr0 name=eth0
+```
+
+Use it for throwaway test containers too (`lxc launch <image> <name> --profile build`).
+
 Then build the base image first, since the others start from it:
 
 ```bash

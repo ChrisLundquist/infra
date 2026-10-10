@@ -15,6 +15,12 @@ variable "ubuntu_release" {
   description = "Ubuntu codename used for the base image (pulled from the ubuntu: remote)."
 }
 
+variable "build_profile" {
+  type        = string
+  default     = "build"
+  description = "LXD profile for build containers. The 'build' profile puts them on a NAT network so builds don't take LAN DHCP leases, announce themselves over mDNS or log to logs.local (see README). Use 'default' on a host without it."
+}
+
 variable "dns_upstream_mode" {
   type        = string
   default     = "recursive"

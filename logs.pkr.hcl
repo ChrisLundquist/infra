@@ -2,6 +2,7 @@ source "lxd" "logs" {
   image          = local.base_image
   output_image   = "logs"
   container_name = "packer-logs"
+  profile        = var.build_profile
   init_sleep     = "5"
   publish_properties = {
     description = "syslog sink for the LAN (logs.local)"

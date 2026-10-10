@@ -2,6 +2,7 @@ source "lxd" "apt-cacher-ng" {
   image          = local.base_image
   output_image   = "apt-cacher-ng"
   container_name = "packer-apt-cacher-ng"
+  profile        = var.build_profile
   init_sleep     = "5"
   publish_properties = {
     description = "apt proxy"

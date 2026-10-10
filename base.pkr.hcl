@@ -2,6 +2,7 @@ source "lxd" "base" {
   image          = "ubuntu:${var.ubuntu_release}"
   output_image   = local.base_image
   container_name = "packer-${local.base_image}"
+  profile        = var.build_profile
   init_sleep     = "5"
   publish_properties = {
     description = "rsyslog, unattended-upgrades, apt mirror, etc"

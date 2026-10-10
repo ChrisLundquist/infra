@@ -22,13 +22,14 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
     Pi-holes got their allow/deny entries from that old container, plus
     `files/etc/pihole/allowlist.list`.
   - `.253` is `pihole-basic` on deon (`deon.local`, 192.168.0.71, bare
-    metal): Ubuntu 22.04, Pi-hole core 6.1.4 / FTL 6.2.3, created 2022-12.
-    Leave it alone until there's a go-ahead (section 2). Its upstream is
-    cloudflared 2022.1.2 on 127.0.0.1#5300, installed from a standalone .deb
-    with `--no-autoupdate` and no apt source, so it won't update by itself.
-    Don't upgrade it by hand: `proxy-dns` was removed in cloudflared 2026.2.0.
-    Its netplan has `dhcp4: true` plus the static .253, so it also holds
-    .145.
+    metal), rolled onto this repo's `pihole` image on 2026-10-10 (section 2)
+    with its allow/deny entries and its full query history. The old Ubuntu
+    22.04 / FTL 6.2.3 container with the cloudflared upstream is stopped as
+    `pihole-basic-old`.
+  - All three Pi-holes have no admin password (by choice) and don't send
+    CORS headers (`webserver.advancedOpts` in `files/etc/pihole/pihole.toml`),
+    so other web pages can't read their query logs through the API. Simple
+    cross-site POSTs (e.g. toggling blocking) still work without a password.
 - deon (LXD 6.7, `dir` storage pool, 44 of 469 GiB used) holds `pihole-basic`,
   `ts-exit-1` (Tailscale exit node) and `logs` (static .146, the `logs.local`
   syslog target), plus stopped 18.04 containers `distcc-5`, `ums` and `vpn`.
@@ -41,6 +42,12 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
   2026-10-10; the old ones are stopped as `apt-cacher-ng-focal` (with its 29G
   cache) and `distcc-bionic`. distcc workers must run the same compiler as
   their clients, so the new one serves 26.04 clients (gcc 15).
+- Throwaway containers on `br0` each take a router DHCP lease (12h). On
+  2026-10-10 a day of builds and tests used up the pool, and new LAN devices
+  got no address until leases expired. Builds and tests now run on the
+  `build` profile's NAT network (README), and deploys give new containers no
+  NIC (`lxc config device add <name> eth0 none`) until their static address
+  takes over.
 - The `default` storage pool is a 91 GiB loop file with about 23 GiB free.
   Every `make` rebuild keeps the previous image (unaliased) for rollback, so
   prune old ones now and then (`lxc image list`, then `lxc image delete`).
@@ -124,39 +131,64 @@ upgrade.
 6. Optionally add `.254` to the router's DHCP DNS servers alongside `.26`
    and `.253`.
 
-## 2. Pi-hole: roll `.253` onto the new image
+## 2. Pi-hole on deon (`.253`)
 
-Only with a go-ahead for deon. Clients already have `.26` as a second
-working resolver. Then do the same on deon, keeping the name
-`pihole-basic` so the two Pi-holes keep distinct mDNS names. Copy the image
-over first:
+Done on 2026-10-10 over SSH (nuc2 isn't an LXD remote of deon), with about
+9 seconds without `.253` while `.26` answered. Run on deon unless noted.
 
-```bash
-lxc image copy pihole deon: --alias pihole
-```
+1. Copy the image from nuc2 (run on nuc2):
 
-```bash
-lxc launch deon:pihole deon:pihole-basic-next && lxc exec deon:pihole-basic-next -- pihole -g
-```
+   ```bash
+   lxc image export pihole /tmp/pihole && scp /tmp/pihole.tar.gz deon.local:/tmp/ && ssh deon.local 'lxc image import /tmp/pihole.tar.gz --alias pihole && rm /tmp/pihole.tar.gz' && rm /tmp/pihole.tar.gz
+   ```
 
-```bash
-scripts/migrate-pihole-state.sh deon:pihole-basic deon:pihole-basic-next
-```
+2. Create the new container with no NIC, so it doesn't need a DHCP lease, and
+   start it:
 
-Check it as in step 1.3, then write the static address with
-`192.168.0.253/24` as in step 1.4 (into `deon:pihole-basic-next`), and swap:
+   ```bash
+   lxc init pihole pihole-basic-next && lxc config device add pihole-basic-next eth0 none && lxc start pihole-basic-next
+   ```
 
-```bash
-lxc stop deon:pihole-basic && lxc rename deon:pihole-basic deon:pihole-basic-old
-```
+3. Copy the hand-curated state (copy the script over first; it only reads from
+   `pihole-basic`):
 
-```bash
-lxc stop deon:pihole-basic-next && lxc rename deon:pihole-basic-next deon:pihole-basic && lxc start deon:pihole-basic
-```
+   ```bash
+   bash migrate-pihole-state.sh pihole-basic pihole-basic-next
+   ```
 
-While `.253` restarts, `.254` answers; clients that try `.253` first may wait
-one resolver timeout during the few seconds of the swap. Upgrades after this
-follow the same pattern, one Pi-hole at a time.
+4. Copy the query history. SQLite's `.backup` takes a consistent copy while
+   FTL runs:
+
+   ```bash
+   lxc exec pihole-basic -- pihole-FTL sqlite3 /etc/pihole/pihole-FTL.db ".backup /tmp/ftl.db" && lxc file pull pihole-basic/tmp/ftl.db /tmp/ftl.db && lxc exec pihole-basic -- rm /tmp/ftl.db
+   ```
+
+   ```bash
+   lxc exec pihole-basic-next -- sh -c 'systemctl stop pihole-FTL && rm -f /etc/pihole/pihole-FTL.db*' && lxc file push --mode=0640 /tmp/ftl.db pihole-basic-next/etc/pihole/pihole-FTL.db && lxc exec pihole-basic-next -- sh -c 'chown pihole:pihole /etc/pihole/pihole-FTL.db && systemctl start pihole-FTL' && rm /tmp/ftl.db
+   ```
+
+5. Check it offline (`dig @127.0.0.1` inside it for a blocked domain and one
+   of the migrated deny entries), then write the static address as in step
+   1.4 with `192.168.0.253/24`.
+
+6. Swap, moving the old MAC so LAN ARP caches stay valid. LXD won't start an
+   instance whose MAC another instance (even a stopped one) still has, so
+   unset it on the old one first:
+
+   ```bash
+   MAC=$(lxc config get pihole-basic volatile.eth0.hwaddr) && lxc stop pihole-basic && lxc rename pihole-basic pihole-basic-old && lxc config unset pihole-basic-old volatile.eth0.hwaddr
+   ```
+
+   ```bash
+   lxc stop pihole-basic-next && lxc config device remove pihole-basic-next eth0 && lxc config set pihole-basic-next volatile.eth0.hwaddr "$MAC" && lxc rename pihole-basic-next pihole-basic && lxc start pihole-basic
+   ```
+
+   To roll back, stop it, unset its MAC, rename it away, give the MAC back to
+   `pihole-basic-old`, rename that back and start it.
+
+7. From another machine, repeat the step 1.3 checks against `.253`, then
+   refresh its lists now that it has network: `lxc exec pihole-basic -- sh -c
+   'pihole -g && pihole updatechecker'`.
 
 ## 3. apt-cacher-ng
 
@@ -293,8 +325,14 @@ Once the new containers have run cleanly for a while:
 lxc delete pihole-focal apt-cacher-ng-focal distcc-bionic
 ```
 
-On deon (its logs are in the `_archive` tarball):
+On deon (logs-bionic's logs are in the `_archive` tarball; pihole-basic-old's
+lists and query history were copied to the new `pihole-basic`). `vpn`
+(strongSwan) is obsolete now that Tailscale covers it:
 
 ```bash
-lxc delete logs-bionic
+lxc delete logs-bionic pihole-basic-old
+```
+
+```bash
+lxc export vpn /srv/vpn-strongswan.tar.gz && lxc delete vpn
 ```

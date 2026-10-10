@@ -19,6 +19,14 @@
   [ntp.sync]
     active = false
 
+# CivetWeb's defaults answer every cross-origin request with
+# Access-Control-Allow-Origin: *, which with no password lets any web page
+# read the query log through the API. Blank them: the web UI is same-origin.
+# (Simple cross-site POSTs, e.g. toggling blocking, still get through; only a
+# password closes those.)
+[webserver]
+  advancedOpts = ["access_control_allow_origin=", "access_control_allow_methods=", "access_control_allow_headers="]
+
 [webserver.interface]
   boxed = true
 

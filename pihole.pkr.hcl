@@ -2,6 +2,7 @@ source "lxd" "pihole" {
   image          = local.base_image
   output_image   = "pihole"
   container_name = "packer-pihole"
+  profile        = var.build_profile
   init_sleep     = "5"
   publish_properties = {
     description = "pihole dns blocking"
@@ -109,6 +110,8 @@ build {
       "dig +dnssec +timeout=5 @127.0.0.1 isc.org | grep -q 'flags:.* ad'",
       # No password: the API must accept us without logging in.
       "curl -sf http://127.0.0.1/api/auth | grep -q '\"valid\":true'",
+      # ...but must not let other origins read it.
+      "if curl -s -D - -o /dev/null -H 'Origin: https://example.com' http://127.0.0.1/api/stats/summary | grep -qi '^access-control-allow-origin'; then echo 'API sends CORS headers' >&2; exit 1; fi",
     ]
   }
 

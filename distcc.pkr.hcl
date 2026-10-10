@@ -2,6 +2,7 @@ source "lxd" "distcc" {
   image          = local.base_image
   output_image   = "distcc"
   container_name = "packer-distcc"
+  profile        = var.build_profile
   init_sleep     = "5"
   publish_properties = {
     description = "distcc worker"
