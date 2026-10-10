@@ -250,8 +250,9 @@ The new container gets a new DHCP address, so update any client's
 
 ## 5. logs (deon)
 
-Done on 2026-10-10; this is the procedure for the next upgrade. The image
-builds on deon itself (`make logs`, after `make base`).
+Done on 2026-10-10 (and redeployed the same day on the rebuilt base, which
+masks sshd); this is the procedure for the next upgrade. The image builds on
+deon itself (`make logs`, after `make base`), on the `build` profile.
 
 Clients send to `logs.local` over UDP, and rsyslog resolves that name only
 when it starts, so the new container has to take over the old one's address
@@ -282,17 +283,25 @@ container to the new one. Nothing needs copying.
    lxc exec logs-next -- sh -c 'printf "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: false\n      addresses: [192.168.0.146/24]\n      routes: [{to: default, via: 192.168.0.1}]\n      nameservers: {addresses: [192.168.0.253, 192.168.0.26]}\n" > /etc/netplan/60-static.yaml && chmod 600 /etc/netplan/60-static.yaml'
    ```
 
-3. Swap. Logs sent during the few seconds in between are lost (UDP):
+3. Stop the new container while the old one still serves. On its first boot
+   cloud-init waits up to about two minutes for a DHCP address it may never
+   get, and that holds up the stop:
+
+   ```bash
+   lxc stop logs-next
+   ```
+
+4. Swap. Logs sent during the few seconds in between are lost (UDP):
 
    ```bash
    lxc stop logs && lxc rename logs logs-old && lxc config device remove logs-old remotes
    ```
 
    ```bash
-   MAC=$(lxc config get logs-old volatile.eth0.hwaddr) && lxc config unset logs-old volatile.eth0.hwaddr && lxc stop logs-next && lxc config set logs-next volatile.eth0.hwaddr "$MAC" && lxc config device add logs-next remotes disk pool=default source=logs-remotes path=/var/log/remotes && lxc rename logs-next logs && lxc start logs
+   MAC=$(lxc config get logs-old volatile.eth0.hwaddr) && lxc config unset logs-old volatile.eth0.hwaddr && lxc config set logs-next volatile.eth0.hwaddr "$MAC" && lxc config device add logs-next remotes disk pool=default source=logs-remotes path=/var/log/remotes && lxc rename logs-next logs && lxc start logs
    ```
 
-4. Check from a client, then on the server:
+5. Check from a client, then on the server:
 
    ```bash
    logger -t deploycheck "hello from $(hostname)"
@@ -325,12 +334,13 @@ Once the new containers have run cleanly for a while:
 lxc delete pihole-focal apt-cacher-ng-focal distcc-bionic
 ```
 
-On deon (logs-bionic's logs are in the `_archive` tarball; pihole-basic-old's
-lists and query history were copied to the new `pihole-basic`). `vpn`
-(strongSwan) is obsolete now that Tailscale covers it:
+On deon (logs-bionic's logs are in the `_archive` tarball; logs-old is the
+first-gen 26.04 logs container, with no volume and its MAC unset;
+pihole-basic-old's lists and query history were copied to the new
+`pihole-basic`). `vpn` (strongSwan) is obsolete now that Tailscale covers it:
 
 ```bash
-lxc delete logs-bionic pihole-basic-old
+lxc delete logs-bionic logs-old pihole-basic-old
 ```
 
 ```bash
