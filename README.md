@@ -8,6 +8,7 @@ Packer templates for the home lab's LXD container images.
 | `apt-cacher-ng` | `resolute-base` | apt proxy on :3142, advertised over mDNS |
 | `distcc` | `resolute-base` | distccd on :3632 for the LAN, with the release's gcc/g++ (workers must match the clients' compiler) |
 | `pihole` | `resolute-base` | Pi-hole v6 with unbound on 127.0.0.1:5335 as its only upstream, no admin password |
+| `logs` | `resolute-base` | `logs.local`: rsyslog on :514 (UDP and TCP) for the whole LAN, filed per host and program, rotated daily with zstd and kept 90 days |
 
 ## Building
 
@@ -30,7 +31,7 @@ make base
 ```
 
 ```bash
-make pihole apt-cacher-ng distcc
+make pihole apt-cacher-ng distcc logs
 ```
 
 Building only publishes images to the local LXD image store; it doesn't touch
@@ -54,6 +55,17 @@ phishing, C2), OISD big and the AdGuard DNS filter. A
 stale within hours. `files/etc/pihole/allowlist.list` holds exact domains the
 household needs that these lists block; the build applies it, and so does
 `scripts/migrate-pihole-state.sh` after copying entries from an old Pi-hole.
+
+## Logs
+
+Every image forwards all of its syslog to `logs.local` (UDP 514, from
+`files/etc/rsyslog.d/90-remote.conf`). The `logs` container files each message
+under `/var/log/remotes/<host>/<program>.log`. logrotate rotates those daily
+and compresses them with zstd (`zstdcat` reads them), and a tmpfiles rule
+deletes anything not written for 90 days, so hosts that go away age out on
+their own. `/var/log/remotes/_archive` is exempt; it holds history we chose
+to keep. In production `/var/log/remotes` is an LXD custom volume, so it
+survives image upgrades (see DEPLOY.md).
 
 ## Deploying
 
