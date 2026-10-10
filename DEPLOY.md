@@ -30,9 +30,13 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
     Its netplan has `dhcp4: true` plus the static .253, so it also holds
     .145.
 - deon (LXD 6.7, `dir` storage pool, 44 of 469 GiB used) holds `pihole-basic`,
-  `ts-exit-1` (Tailscale exit node) and `logs` (.146, the `logs.local` syslog
-  target, Ubuntu 18.04), plus stopped 18.04 containers `distcc-5`, `ums` and
-  `vpn`. None of these besides the Pi-hole have templates here yet.
+  `ts-exit-1` (Tailscale exit node) and `logs` (static .146, the `logs.local`
+  syslog target), plus stopped 18.04 containers `distcc-5`, `ums` and `vpn`.
+  `ts-exit-1` has no template here yet.
+  - `logs` runs this repo's 26.04 `logs` image since 2026-10-10, with its logs
+    on the custom volume `logs-remotes`. The 18.04 container it replaced is
+    stopped as `logs-bionic`; its logs back to 2019 are in
+    `/var/log/remotes/_archive/logs-bionic-remotes-20261010.tar.zst`.
 - nuc2's `apt-cacher-ng` and `distcc-2` run this repo's 26.04 images since
   2026-10-10; the old ones are stopped as `apt-cacher-ng-focal` (with its 29G
   cache) and `distcc-bionic`. distcc workers must run the same compiler as
@@ -212,10 +216,85 @@ lxc stop distcc-next && lxc rename distcc-next distcc-2 && lxc start distcc-2
 The new container gets a new DHCP address, so update any client's
 `DISTCC_HOSTS` or `/etc/distcc/hosts` that names the old IP.
 
+## 5. logs (deon)
+
+Done on 2026-10-10; this is the procedure for the next upgrade. The image
+builds on deon itself (`make logs`, after `make base`).
+
+Clients send to `logs.local` over UDP, and rsyslog resolves that name only
+when it starts, so the new container has to take over the old one's address
+(`192.168.0.146`) or every client keeps sending to the old IP until its
+rsyslog restarts. The new container also takes the old MAC, so ARP caches on
+the LAN stay valid. LXD refuses to start an instance whose MAC another
+instance (even a stopped one) still has, so the old container gives its MAC
+up; it gets a new one if it's ever started again.
+
+The logs live on the custom volume `logs-remotes`, which moves from the old
+container to the new one. Nothing needs copying.
+
+1. Create the new container with the volume detached (the old one is still
+   writing to it) and check it receives. It may not get a DHCP address,
+   which doesn't matter, so test over loopback:
+
+   ```bash
+   lxc launch logs logs-next
+   ```
+
+   ```bash
+   lxc exec logs-next -- sh -c 'logger -n 127.0.0.1 -P 514 --udp -t deploycheck hi && sleep 2 && cat /var/log/remotes/logs-next/deploycheck.log && rm -r /var/log/remotes/logs-next'
+   ```
+
+2. Give it the static address. It takes effect on the next start:
+
+   ```bash
+   lxc exec logs-next -- sh -c 'printf "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: false\n      addresses: [192.168.0.146/24]\n      routes: [{to: default, via: 192.168.0.1}]\n      nameservers: {addresses: [192.168.0.253, 192.168.0.26]}\n" > /etc/netplan/60-static.yaml && chmod 600 /etc/netplan/60-static.yaml'
+   ```
+
+3. Swap. Logs sent during the few seconds in between are lost (UDP):
+
+   ```bash
+   lxc stop logs && lxc rename logs logs-old && lxc config device remove logs-old remotes
+   ```
+
+   ```bash
+   MAC=$(lxc config get logs-old volatile.eth0.hwaddr) && lxc config unset logs-old volatile.eth0.hwaddr && lxc stop logs-next && lxc config set logs-next volatile.eth0.hwaddr "$MAC" && lxc config device add logs-next remotes disk pool=default source=logs-remotes path=/var/log/remotes && lxc rename logs-next logs && lxc start logs
+   ```
+
+4. Check from a client, then on the server:
+
+   ```bash
+   logger -t deploycheck "hello from $(hostname)"
+   ```
+
+   ```bash
+   lxc exec logs -- sh -c 'tail -n1 /var/log/remotes/*/deploycheck.log'
+   ```
+
+To roll back, stop `logs`, move the volume and the MAC back to `logs-old` the
+same way, and start it.
+
+The first deploy (from the 18.04 container, which kept its logs in its own
+rootfs) created the volume with `lxc storage volume create default
+logs-remotes`, and archived the old logs into it once `logs-bionic` was
+stopped:
+
+```bash
+sudo tar -C /var/snap/lxd/common/lxd/storage-pools/default/containers/logs-bionic/rootfs/var/log -cf - remotes | zstd -T0 -12 --long=27 | lxc exec logs -- sh -c 'cat > /var/log/remotes/_archive/logs-bionic-remotes-20261010.tar.zst'
+```
+
+Read it with `zstd -dc --long=27 <file> | tar -tvf -` (or `-xf -`).
+`_archive` is exempt from the 90-day expiry.
+
 ## Clean up
 
 Once the new containers have run cleanly for a while:
 
 ```bash
 lxc delete pihole-focal apt-cacher-ng-focal distcc-bionic
+```
+
+On deon (its logs are in the `_archive` tarball):
+
+```bash
+lxc delete logs-bionic
 ```

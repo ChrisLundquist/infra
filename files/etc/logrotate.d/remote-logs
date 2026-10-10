@@ -1,0 +1,21 @@
+# Logs from other hosts, filed by rsyslog.d/10-remote-server.conf. Rotate
+# daily and compress with zstd. tmpfiles.d/remote-logs.conf deletes anything
+# older than 90 days, including the logs of hosts that stopped sending.
+/var/log/remotes/*/*.log {
+	daily
+	rotate 90
+	missingok
+	notifempty
+	dateext
+	compress
+	compresscmd /usr/bin/zstd
+	compressoptions -q -T0
+	compressext .zst
+	uncompresscmd /usr/bin/unzstd
+	delaycompress
+	nocreate
+	sharedscripts
+	postrotate
+		/usr/lib/rsyslog/rsyslog-rotate
+	endscript
+}
