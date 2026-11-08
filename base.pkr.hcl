@@ -37,10 +37,16 @@ build {
     destination = "/etc/rsyslog.d/90-remote.conf"
   }
 
+  provisioner "file" {
+    source      = "files/etc/apt/apt.conf.d/51unattended-upgrades-updates"
+    destination = "/etc/apt/apt.conf.d/51unattended-upgrades-updates"
+  }
+
   provisioner "shell" {
     inline = concat([
-      "chmod 0644 /etc/rsyslog.d/90-remote.conf",
+      "chmod 0644 /etc/rsyslog.d/90-remote.conf /etc/apt/apt.conf.d/51unattended-upgrades-updates",
       "rsyslogd -N1",
+      "apt-config dump | grep -qF 'Unattended-Upgrade::Allowed-Origins:: \"$${distro_id}:$${distro_codename}-updates\";'",
       # We use `lxc exec`, not `lxc console`, and LXD's /dev/console often isn't
       # ready when agetty starts, which leaves every container "degraded".
       "systemctl mask console-getty.service",

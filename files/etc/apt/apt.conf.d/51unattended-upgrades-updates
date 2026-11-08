@@ -1,0 +1,4 @@
+// Also install the release's regular bug-fix updates, not only security fixes.
+// Without this, -updates piles up in every container (26-61 packages each
+// after a month on deon).
+Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-updates";
