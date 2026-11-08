@@ -15,8 +15,8 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
 - On 2026-11-08 all three Pi-holes moved to Pi-hole core 6.5, web 6.6.1 and
   FTL 6.8 with `scripts/roll-pihole.sh` (sections 1 and 2), keeping their
   lists, MACs and query history. The FTL 6.7.1 containers are stopped as
-  `pihole-ftl671` and `pihole2-ftl671` on nuc2 and `pihole-basic-ftl671` on
-  deon.
+  `pihole-ftl671` and `pihole2-ftl671` on nuc2. deon's copy was deleted in
+  its clean-up the same day.
 - LAN clients get DNS servers `192.168.0.253` and `192.168.0.26` from DHCP.
   Both work now.
   - `.26` is `pihole2` on nuc2 (26.04, this repo's `pihole` image), deployed
@@ -29,8 +29,8 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
   - `.253` is `pihole-basic` on deon (`deon.local`, 192.168.0.71, bare
     metal), rolled onto this repo's `pihole` image on 2026-10-10 (section 2)
     with its allow/deny entries and its full query history. The old Ubuntu
-    22.04 / FTL 6.2.3 container with the cloudflared upstream is stopped as
-    `pihole-basic-old`.
+    22.04 / FTL 6.2.3 container with the cloudflared upstream has since been
+    deleted.
   - All three Pi-holes have no admin password (by choice). Since FTL 6.8
     (GHSA-322h-f873-hp54), a Pi-hole without a password refuses API requests
     a browser sends on behalf of another website, and requests under host
@@ -39,13 +39,17 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
     `.local`). The image also blanks the CORS headers
     (`webserver.advancedOpts` in `files/etc/pihole/pihole.toml`) as a second
     layer.
-- deon (LXD 6.9, `dir` storage pool, 51 of 469 GiB used) holds `pihole-basic`,
-  `ts-exit-1` (Tailscale exit node) and `logs` (static .146, the `logs.local`
-  syslog target), plus stopped 18.04 containers `distcc-5`, `ums` and `vpn`.
-  `ts-exit-1` has no template here yet.
+- deon (LXD 6.10, `dir` storage pool, 22 of 469 GiB used) runs only
+  `pihole-basic`, `ts-exit-1` (Tailscale exit node) and `logs` (static .146,
+  the `logs.local` syslog target). `ts-exit-1` has no template here yet.
+  - Its clean-up was done on 2026-11-08. All stopped containers were deleted:
+    `distcc-5`, `logs-bionic`, `logs-old`, `pihole-basic-old`,
+    `pihole-basic-ftl671`, `ums` and `vpn`. The unused images went too.
+  - `vpn` and `ums` were exported first to `/var/backups/lxd-exports/`
+    (root-only, zstd).
   - `logs` runs this repo's 26.04 `logs` image since 2026-10-10, with its logs
-    on the custom volume `logs-remotes`. The 18.04 container it replaced is
-    stopped as `logs-bionic`; its logs back to 2019 are in
+    on the custom volume `logs-remotes`. The logs of the 18.04 container it
+    replaced, going back to 2019, are in
     `/var/log/remotes/_archive/logs-bionic-remotes-20261010.tar.zst`.
 - nuc2's `apt-cacher-ng` and `distcc-2` run this repo's 26.04 images since
   2026-10-10; the old ones are stopped as `apt-cacher-ng-focal` (with its 29G
@@ -290,26 +294,10 @@ Once the new containers have run cleanly for a while:
 lxc delete pihole-focal apt-cacher-ng-focal distcc-bionic
 ```
 
-On deon (logs-bionic's logs are in the `_archive` tarball; pihole-basic-old's
-lists and query history were copied to the new `pihole-basic`). `vpn`
-(strongSwan) is obsolete now that Tailscale covers it:
-
-```bash
-lxc delete logs-bionic pihole-basic-old
-```
-
-```bash
-lxc export vpn /srv/vpn-strongswan.tar.gz && lxc delete vpn
-```
-
-The FTL 6.7.1 Pi-holes from the 2026-11-08 roll. On nuc2:
+The FTL 6.7.1 Pi-holes from the 2026-11-08 roll, on nuc2:
 
 ```bash
 lxc delete pihole-ftl671 pihole2-ftl671
 ```
 
-On deon:
-
-```bash
-lxc delete pihole-basic-ftl671
-```
+deon's clean-up is done (2026-11-08); see the state section above.
