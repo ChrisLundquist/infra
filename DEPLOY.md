@@ -10,8 +10,13 @@ names with a remote (e.g. `deon:`) for other hosts. `lxc rename` only works on
 a stopped instance, which is why swaps stop the new container briefly. A
 renamed container picks up its new name as hostname (and mDNS name) on start.
 
-## State as of 2026-10-10 (worth re-checking first)
+## State as of 2026-11-08 (worth re-checking first)
 
+- On 2026-11-08 all three Pi-holes moved to Pi-hole core 6.5, web 6.6.1 and
+  FTL 6.8 with `scripts/roll-pihole.sh` (sections 1 and 2), keeping their
+  lists, MACs and query history. The FTL 6.7.1 containers are stopped as
+  `pihole-ftl671` and `pihole2-ftl671` on nuc2 and `pihole-basic-ftl671` on
+  deon.
 - LAN clients get DNS servers `192.168.0.253` and `192.168.0.26` from DHCP.
   Both work now.
   - `.26` is `pihole2` on nuc2 (26.04, this repo's `pihole` image), deployed
@@ -26,11 +31,15 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
     with its allow/deny entries and its full query history. The old Ubuntu
     22.04 / FTL 6.2.3 container with the cloudflared upstream is stopped as
     `pihole-basic-old`.
-  - All three Pi-holes have no admin password (by choice) and don't send
-    CORS headers (`webserver.advancedOpts` in `files/etc/pihole/pihole.toml`),
-    so other web pages can't read their query logs through the API. Simple
-    cross-site POSTs (e.g. toggling blocking) still work without a password.
-- deon (LXD 6.7, `dir` storage pool, 44 of 469 GiB used) holds `pihole-basic`,
+  - All three Pi-holes have no admin password (by choice). Since FTL 6.8
+    (GHSA-322h-f873-hp54), a Pi-hole without a password refuses API requests
+    a browser sends on behalf of another website, and requests under host
+    names it doesn't know (DNS rebinding). It accepts its IP addresses,
+    `pi.hole`, `webserver.domain` and its hostname (alone, `.lan` or
+    `.local`). The image also blanks the CORS headers
+    (`webserver.advancedOpts` in `files/etc/pihole/pihole.toml`) as a second
+    layer.
+- deon (LXD 6.9, `dir` storage pool, 51 of 469 GiB used) holds `pihole-basic`,
   `ts-exit-1` (Tailscale exit node) and `logs` (static .146, the `logs.local`
   syslog target), plus stopped 18.04 containers `distcc-5`, `ums` and `vpn`.
   `ts-exit-1` has no template here yet.
@@ -48,7 +57,8 @@ renamed container picks up its new name as hostname (and mDNS name) on start.
   `build` profile's NAT network (README), and deploys give new containers no
   NIC (`lxc config device add <name> eth0 none`) until their static address
   takes over.
-- The `default` storage pool is a 91 GiB loop file with about 23 GiB free.
+- nuc2's `default` storage pool is a 91 GiB loop file with about 27 GiB free
+  (2026-11-08).
   Every `make` rebuild keeps the previous image (unaliased) for rollback, so
   prune old ones now and then (`lxc image list`, then `lxc image delete`).
 
@@ -69,126 +79,81 @@ Then on nuc2, with the token it prints:
 lxc remote add deon 192.168.0.71 --token <token>
 ```
 
-## 1. Pi-hole on nuc2 (`.254`, and the same for `.26`)
+## 1. Pi-holes on nuc2 (`.254`, then `.26`)
 
-Done on 2026-10-10 for both addresses; this is the procedure for the next
-upgrade.
+Last done on 2026-11-08 (FTL 6.7.1 to 6.8), with about 8 seconds without each
+address while the other Pi-holes answered. `scripts/roll-pihole.sh` does the
+whole swap, in two steps:
 
-1. Launch the new image, which gets a temporary DHCP address, and refresh its
-   blocklists. The threat-intel feeds baked in at build time go stale within
-   hours; after this, a daily timer keeps them fresh.
+- `prepare <name> <image> <ip>` starts `<name>-next` on the `build` profile,
+  which gives it internet through NAT without taking a LAN DHCP lease. It
+  refreshes the blocklists and copies from the running container:
+  - allow/deny entries, groups, clients and local DNS records, with
+    `scripts/migrate-pihole-state.sh`;
+  - the query history, as a `.backup` copy of `pihole-FTL.db`.
 
-   ```bash
-   lxc launch pihole pihole-next
-   ```
+  It then writes the static address, checks DNS, DNSSEC and the API, and
+  stops the new container. The running Pi-hole keeps serving throughout.
+- `swap <name> <ip>` refuses to run unless the other Pi-holes answer. It
+  stops the old container and keeps it as `<name>-ftl<version>`, moves its
+  MAC so LAN ARP caches stay valid, switches the new container to the
+  `default` profile and starts it under the old name. If `<ip>` doesn't
+  answer within 90 seconds, it puts the old container back.
 
-   ```bash
-   lxc exec pihole-next -- pihole -g
-   ```
+Roll `.254` first: the router doesn't hand it out, so it's the canary. Then
+`.26`, then `.253` (section 2).
 
-2. Copy the hand-curated state from the working Pi-hole (`deon:pihole-basic`
-   at `.253`): allow/deny entries,
-   groups, clients, local DNS records and CNAMEs. Blocklists come from the
-   image (`files/etc/pihole/adlists.list`), the repo's
-   `files/etc/pihole/allowlist.list` is re-applied on top, and there's
-   deliberately no admin password. Nothing is written to the source.
+```bash
+scripts/roll-pihole.sh prepare pihole pihole 192.168.0.254
+```
 
-   ```bash
-   scripts/migrate-pihole-state.sh deon:pihole-basic pihole-next
-   ```
+```bash
+scripts/roll-pihole.sh swap pihole 192.168.0.254
+```
 
-   Don't use teleporter for this. Importing a backup from an older FTL fails
-   partway on gravity schema changes (tested 6.3 → 6.7) after it has already
-   overwritten the config.
+Then do the same with `pihole2` and `192.168.0.26`, and check it from another
+machine:
 
-3. Check it with the DHCP address from `lxc list pihole-next`:
+```bash
+dig @192.168.0.26 example.com +short && dig @192.168.0.26 pagead2.googlesyndication.com +short && dig @192.168.0.26 dnssec-failed.org | grep status
+```
 
-   ```bash
-   dig @<pihole-next-ip> example.com +short && dig @<pihole-next-ip> pagead2.googlesyndication.com +short && dig @<pihole-next-ip> dnssec-failed.org | grep status
-   ```
+Expect real addresses, then `0.0.0.0`, then `SERVFAIL`.
 
-   Expect real addresses, then `0.0.0.0`, then `SERVFAIL`.
+To roll back by hand, reverse the swap:
+1. Stop the new container, unset its `volatile.eth0.hwaddr` and rename it
+   away.
+2. Rename `<name>-ftl<version>` back, give it the MAC and start it.
 
-4. Give it the static address. The file only takes effect on the next boot,
-   so write it while the old container still holds `.254`:
-
-   ```bash
-   lxc exec pihole-next -- sh -c 'printf "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: false\n      addresses: [192.168.0.254/24]\n      routes: [{to: default, via: 192.168.0.1}]\n      nameservers: {addresses: [127.0.0.1]}\n" > /etc/netplan/60-static.yaml && chmod 600 /etc/netplan/60-static.yaml'
-   ```
-
-5. Swap. While a Pi-hole restarts, clients use the other resolver:
-
-   ```bash
-   lxc stop pihole && lxc rename pihole pihole-focal
-   ```
-
-   ```bash
-   lxc stop pihole-next && lxc rename pihole-next pihole && lxc start pihole
-   ```
-
-   Then repeat the `dig` checks against `192.168.0.254`.
-
-6. Optionally add `.254` to the router's DHCP DNS servers alongside `.26`
-   and `.253`.
+Don't use teleporter to copy state. Importing a backup from an older FTL fails
+partway on gravity schema changes (tested 6.3 to 6.7), after it has already
+overwritten the config.
 
 ## 2. Pi-hole on deon (`.253`)
 
-Done on 2026-10-10 over SSH (nuc2 isn't an LXD remote of deon), with about
-9 seconds without `.253` while `.26` answered. Run on deon unless noted.
+Last done on 2026-11-08, with about 9 seconds without `.253` while `.26`
+answered. deon has no GitHub access and isn't an LXD remote of nuc2, so copy
+the image and both scripts over SSH. deon has no `dig`; the script falls back
+to a Python DNS query for its checks. On nuc2:
 
-1. Copy the image from nuc2 (run on nuc2):
+```bash
+lxc image export pihole /tmp/pihole && ssh deon.local 'mkdir -p /tmp/roll' && scp /tmp/pihole.tar.gz scripts/roll-pihole.sh scripts/migrate-pihole-state.sh deon.local:/tmp/roll/ && rm /tmp/pihole.tar.gz
+```
 
-   ```bash
-   lxc image export pihole /tmp/pihole && scp /tmp/pihole.tar.gz deon.local:/tmp/ && ssh deon.local 'lxc image import /tmp/pihole.tar.gz --alias pihole && rm /tmp/pihole.tar.gz' && rm /tmp/pihole.tar.gz
-   ```
+deon still has an older image under the `pihole` alias, so import this one
+under a dated alias, then prepare and swap as in section 1:
 
-2. Create the new container with no NIC, so it doesn't need a DHCP lease, and
-   start it:
+```bash
+ssh deon.local 'cd /tmp/roll && lxc image import pihole.tar.gz --alias pihole-<YYYYMMDD> && rm pihole.tar.gz'
+```
 
-   ```bash
-   lxc init pihole pihole-basic-next && lxc config device add pihole-basic-next eth0 none && lxc start pihole-basic-next
-   ```
+```bash
+ssh deon.local 'cd /tmp/roll && ./roll-pihole.sh prepare pihole-basic pihole-<YYYYMMDD> 192.168.0.253'
+```
 
-3. Copy the hand-curated state (copy the script over first; it only reads from
-   `pihole-basic`):
-
-   ```bash
-   bash migrate-pihole-state.sh pihole-basic pihole-basic-next
-   ```
-
-4. Copy the query history. SQLite's `.backup` takes a consistent copy while
-   FTL runs:
-
-   ```bash
-   lxc exec pihole-basic -- pihole-FTL sqlite3 /etc/pihole/pihole-FTL.db ".backup /tmp/ftl.db" && lxc file pull pihole-basic/tmp/ftl.db /tmp/ftl.db && lxc exec pihole-basic -- rm /tmp/ftl.db
-   ```
-
-   ```bash
-   lxc exec pihole-basic-next -- sh -c 'systemctl stop pihole-FTL && rm -f /etc/pihole/pihole-FTL.db*' && lxc file push --mode=0640 /tmp/ftl.db pihole-basic-next/etc/pihole/pihole-FTL.db && lxc exec pihole-basic-next -- sh -c 'chown pihole:pihole /etc/pihole/pihole-FTL.db && systemctl start pihole-FTL' && rm /tmp/ftl.db
-   ```
-
-5. Check it offline (`dig @127.0.0.1` inside it for a blocked domain and one
-   of the migrated deny entries), then write the static address as in step
-   1.4 with `192.168.0.253/24`.
-
-6. Swap, moving the old MAC so LAN ARP caches stay valid. LXD won't start an
-   instance whose MAC another instance (even a stopped one) still has, so
-   unset it on the old one first:
-
-   ```bash
-   MAC=$(lxc config get pihole-basic volatile.eth0.hwaddr) && lxc stop pihole-basic && lxc rename pihole-basic pihole-basic-old && lxc config unset pihole-basic-old volatile.eth0.hwaddr
-   ```
-
-   ```bash
-   lxc stop pihole-basic-next && lxc config device remove pihole-basic-next eth0 && lxc config set pihole-basic-next volatile.eth0.hwaddr "$MAC" && lxc rename pihole-basic-next pihole-basic && lxc start pihole-basic
-   ```
-
-   To roll back, stop it, unset its MAC, rename it away, give the MAC back to
-   `pihole-basic-old`, rename that back and start it.
-
-7. From another machine, repeat the step 1.3 checks against `.253`, then
-   refresh its lists now that it has network: `lxc exec pihole-basic -- sh -c
-   'pihole -g && pihole updatechecker'`.
+```bash
+ssh deon.local 'cd /tmp/roll && ./roll-pihole.sh swap pihole-basic 192.168.0.253 && rm -rf /tmp/roll'
+```
 
 ## 3. apt-cacher-ng
 
@@ -335,4 +300,16 @@ lxc delete logs-bionic pihole-basic-old
 
 ```bash
 lxc export vpn /srv/vpn-strongswan.tar.gz && lxc delete vpn
+```
+
+The FTL 6.7.1 Pi-holes from the 2026-11-08 roll. On nuc2:
+
+```bash
+lxc delete pihole-ftl671 pihole2-ftl671
+```
+
+On deon:
+
+```bash
+lxc delete pihole-basic-ftl671
 ```

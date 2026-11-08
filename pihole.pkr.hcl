@@ -112,6 +112,12 @@ build {
       "curl -sf http://127.0.0.1/api/auth | grep -q '\"valid\":true'",
       # ...but must not let other origins read it.
       "if curl -s -D - -o /dev/null -H 'Origin: https://example.com' http://127.0.0.1/api/stats/summary | grep -qi '^access-control-allow-origin'; then echo 'API sends CORS headers' >&2; exit 1; fi",
+      # FTL 6.8+ refuses other websites' requests without a password: a
+      # cross-site text/plain POST (no preflight) and a DNS-rebinding Host.
+      "test \"$(curl -s -o /dev/null -w '%%{http_code}' -X POST -H 'Origin: https://example.com' -H 'Content-Type: text/plain' --data '{\"blocking\":false,\"timer\":5}' http://127.0.0.1/api/dns/blocking)\" = 401",
+      "curl -sf http://127.0.0.1/api/dns/blocking | grep -q '\"blocking\":\"enabled\"'",
+      "test \"$(curl -s -o /dev/null -w '%%{http_code}' -H 'Host: rebind.example.com' http://127.0.0.1/api/stats/summary)\" = 401",
+      "curl -sf -H 'Host: pi.hole' http://127.0.0.1/api/auth | grep -q '\"valid\":true'",
     ]
   }
 
