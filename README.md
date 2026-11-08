@@ -4,7 +4,7 @@ Packer templates for the home lab's LXD container images.
 
 | Image | Built from | What it is |
 |---|---|---|
-| `resolute-base` | `ubuntu:resolute` (26.04 LTS) | avahi, squid-deb-proxy-client (finds apt-cacher-ng over mDNS), remote rsyslog to `logs.local`, unattended-upgrades |
+| `resolute-base` | `ubuntu:resolute` (26.04 LTS) | avahi, squid-deb-proxy-client (finds apt-cacher-ng over mDNS), remote rsyslog to `logs.local`, unattended-upgrades (security and `-updates`) |
 | `apt-cacher-ng` | `resolute-base` | apt proxy on :3142, advertised over mDNS |
 | `distcc` | `resolute-base` | distccd on :3632 for the LAN, with the release's gcc/g++ (workers must match the clients' compiler) |
 | `pihole` | `resolute-base` | Pi-hole v6 with unbound on 127.0.0.1:5335 as its only upstream, no admin password |
